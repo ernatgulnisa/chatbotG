@@ -1,0 +1,84 @@
+# Railway ignore file - exclude unnecessary files from deployment
+
+# Local development
+.env.local
+.env.development
+*.local
+
+# Node modules (will be installed by Railway)
+node_modules/
+frontend/node_modules/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional - удалите эту строку если хотите включить)
+*.md
+!README.md
+
+# Test files
+tests/
+pytest_cache/
+.pytest_cache/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Database files (local only)
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker (not needed on Railway)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Local scripts
+start.ps1
+start-with-localtunnel.ps1
+start-with-cloudflare.ps1
+stop-all.ps1
+*.ps1
+!start-railway.sh
+
+# Uploads (will be on persistent storage)
+uploads/
+media/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover

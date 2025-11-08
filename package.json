@@ -1,0 +1,31 @@
+{
+  "name": "whatsapp-bot-crm-platform",
+  "version": "1.0.0",
+  "description": "WhatsApp Bot & CRM Platform - SaaS для создания ботов и работы с клиентами",
+  "scripts": {
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" --kill-others",
+    "backend": "cd backend && venv\\Scripts\\activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "backend:python": "cd backend && venv\\Scripts\\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "frontend": "cd frontend && npm run dev",
+    "install:all": "npm --prefix frontend install && cd backend && .\\venv\\Scripts\\pip install -r requirements.txt",
+    "setup": "cd backend && python -m venv venv && .\\venv\\Scripts\\pip install -r requirements.txt && cd ../frontend && npm install",
+    "db:init": "cd backend && .\\venv\\Scripts\\python init_db.py",
+    "build": "cd frontend && npm run build",
+    "start:prod": "concurrently \"npm run backend:prod\" \"npm run frontend:serve\"",
+    "backend:prod": "cd backend && venv\\Scripts\\python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "frontend:serve": "cd frontend && npm run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "crm",
+    "saas",
+    "fastapi",
+    "react"
+  ],
+  "author": "",
+  "license": "MIT"
+}
