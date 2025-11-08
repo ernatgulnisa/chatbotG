@@ -1,0 +1,68 @@
+# Render Blueprint для автоматического деплоя
+# Документация: https://render.com/docs/blueprint-spec
+
+services:
+  # Backend Web Service (FastAPI + React)
+  - type: web
+    name: chatbotg-web
+    runtime: python
+    plan: free
+    region: frankfurt  # Ближайший к вам регион
+    branch: main
+    buildCommand: |
+      # Установка Python зависимостей
+      cd backend
+      pip install -r requirements.txt
+      
+      # Установка Node.js зависимостей и сборка фронтенда
+      cd ../frontend
+      npm ci
+      npm run build
+      
+      # Копирование собранного фронтенда в backend/static
+      mkdir -p ../backend/static
+      cp -r dist/* ../backend/static/
+    startCommand: bash start-render.sh
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: SECRET_KEY
+        sync: false  # Будет задан вручную в Dashboard
+      - key: ENCRYPTION_KEY
+        sync: false  # Будет задан вручную в Dashboard
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+      - key: DATABASE_URL
+        fromDatabase:
+          name: chatbotg-db
+          property: connectionString
+      - key: WHATSAPP_API_URL
+        value: https://graph.facebook.com/v18.0
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false  # Будет задан вручную
+      - key: WHATSAPP_APP_SECRET
+        sync: false  # Будет задан вручную
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: MAX_UPLOAD_SIZE
+        value: 10485760
+      - key: WEBHOOK_URL
+        sync: false  # Будет задан после получения URL
+      - key: ALLOWED_ORIGINS
+        sync: false  # Будет задан после получения URL
+    healthCheckPath: /health
+    autoDeploy: true
+
+databases:
+  # PostgreSQL Database
+  - name: chatbotg-db
+    databaseName: chatbotg
+    plan: free
+    region: frankfurt
+    user: chatbotg_user
