@@ -100,7 +100,7 @@ class BotProcessor:
             # No scenario matched, send default response
             if bot.default_response:
                 await whatsapp_service.send_text_message(
-                    to=conversation.customer.phone,
+                    to=conversation.customer.phone_number,
                     text=bot.default_response
                 )
                 self._save_bot_message(conversation, bot.default_response, "text")
@@ -174,7 +174,7 @@ class BotProcessor:
             
             if response_text:
                 await whatsapp_service.send_text_message(
-                    to=conversation.customer.phone,
+                    to=conversation.customer.phone_number,
                     text=response_text
                 )
                 
@@ -266,7 +266,7 @@ class BotProcessor:
             text = node_data.get("message", "")
             if text:
                 await whatsapp_service.send_text_message(
-                    to=customer.phone,
+                    to=customer.phone_number,
                     text=text
                 )
                 
@@ -288,7 +288,7 @@ class BotProcessor:
             question = node_data.get("question", "")
             if question:
                 await whatsapp_service.send_text_message(
-                    to=customer.phone,
+                    to=customer.phone_number,
                     text=question
                 )
                 self._save_bot_message(conversation, question, "text")
@@ -306,7 +306,7 @@ class BotProcessor:
                 ]
                 
                 await whatsapp_service.send_interactive_buttons(
-                    to=customer.phone,
+                    to=customer.phone_number,
                     body_text=message_text,
                     buttons=button_list
                 )
@@ -381,7 +381,7 @@ class BotProcessor:
                 self.db.commit()
                 
                 await whatsapp_service.send_text_message(
-                    to=customer.phone,
+                    to=customer.phone_number,
                     text="Соединяю вас с оператором..."
                 )
                 return
