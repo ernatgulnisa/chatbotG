@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Copy, Check, RefreshCw, ExternalLink, Globe, AlertTriangle, CheckCircle } from 'lucide-react';
+import api from '../services/api';
 
 export default function WebhookInfo() {
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -12,21 +13,22 @@ export default function WebhookInfo() {
     setLoading(true);
     try {
       // Get webhook URL from .env via backend
-      const response = await fetch('http://localhost:8000/api/v1/webhooks/config');
+      const response = await api.get('/webhooks/config');
       
-      if (!response.ok) {
-        throw new Error('Backend not responding');
-      }
-      
-      const data = await response.json();
+      const data = response.data;
       
       if (data.webhook_url) {
         setWebhookUrl(data.webhook_url);
         setVerifyToken(data.verify_token || 'my_secure_verify_token_12345');
         setTunnelRunning(true);
       } else {
-        setWebhookUrl('');
-        setTunnelRunning(false);
+        // Fallback to auto-generated URL for local development
+        const backendUrl = window.location.origin.includes('localhost')
+          ? 'http://localhost:8000'
+          : window.location.origin;
+        setWebhookUrl(`${backendUrl}/api/v1/webhooks/whatsapp`);
+        setVerifyToken(data.verify_token || 'my_secure_token_12345');
+        setTunnelRunning(true);
       }
     } catch (error) {
       console.error('Failed to fetch webhook URL:', error);
@@ -83,36 +85,18 @@ export default function WebhookInfo() {
 
       {/* Tunnel Not Running Warning */}
       {!loading && !tunnelRunning && (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg">
+        <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-300 dark:border-yellow-700 rounded-lg">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={24} />
+            <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={24} />
             <div className="flex-1">
-              <h4 className="font-bold text-red-800 dark:text-red-300 mb-2">
-                ⚠️ Туннель не запущен
+              <h4 className="font-bold text-yellow-800 dark:text-yellow-300 mb-2">
+                ℹ️ Не удалось получить Webhook URL из переменных окружения
               </h4>
-              <p className="text-sm text-red-700 dark:text-red-400 mb-3">
-                Для получения Webhook URL необходимо запустить туннель. Выполните одну из команд:
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 mb-2">
+                Используется автоматически сгенерированный URL. Если вы деплоите на продакшен, убедитесь что в .env файле установлена переменная WEBHOOK_URL.
               </p>
-              <div className="space-y-2">
-                <div className="bg-red-100 dark:bg-red-900/40 p-3 rounded border border-red-200 dark:border-red-800">
-                  <p className="text-xs text-red-600 dark:text-red-400 font-semibold mb-1">
-                    LocalTunnel (рекомендуется):
-                  </p>
-                  <code className="text-sm text-red-800 dark:text-red-200 font-mono">
-                    .\start-with-localtunnel.ps1
-                  </code>
-                </div>
-                <div className="bg-red-100 dark:bg-red-900/40 p-3 rounded border border-red-200 dark:border-red-800">
-                  <p className="text-xs text-red-600 dark:text-red-400 font-semibold mb-1">
-                    Cloudflare Tunnel:
-                  </p>
-                  <code className="text-sm text-red-800 dark:text-red-200 font-mono">
-                    .\start-with-cloudflare.ps1
-                  </code>
-                </div>
-              </div>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-3">
-                После запуска нажмите кнопку "Обновить" выше
+              <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                Для локальной разработки используется: http://localhost:8000/api/v1/webhooks/whatsapp
               </p>
             </div>
           </div>
@@ -127,19 +111,19 @@ export default function WebhookInfo() {
         <div className="flex gap-2">
           <input
             type="text"
-            value={webhookUrl || 'Туннель не запущен - запустите start-with-localtunnel.ps1'}
+            value={webhookUrl || 'Загрузка...'}
             readOnly
             className={`flex-1 px-4 py-3 border rounded-lg font-mono text-sm ${
               tunnelRunning
                 ? 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white'
-                : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-700 dark:text-red-400'
+                : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-400'
             }`}
           />
           <button
             onClick={() => copyToClipboard(webhookUrl)}
-            disabled={!tunnelRunning}
+            disabled={!webhookUrl}
             className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            title={tunnelRunning ? "Копировать URL" : "Туннель не запущен"}
+            title={webhookUrl ? "Копировать URL" : "URL не загружен"}
           >
             {copied ? <Check size={20} /> : <Copy size={20} />}
           </button>
@@ -147,7 +131,7 @@ export default function WebhookInfo() {
         {tunnelRunning && webhookUrl && (
           <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center gap-1">
             <CheckCircle size={14} />
-            Туннель активен - URL готов к использованию
+            Webhook URL готов к использованию
           </p>
         )}
       </div>
@@ -205,12 +189,13 @@ export default function WebhookInfo() {
         </div>
       )}
 
-      {/* Note about tunnel URL */}
+      {/* Note about webhook URL */}
       <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
         <p className="text-sm text-blue-700 dark:text-blue-400">
-          <strong>💡 Совет:</strong> Для постоянного URL используйте Cloudflare Tunnel.
-          LocalTunnel генерирует новый URL при каждом запуске.
-          Страница автоматически обновляет URL каждые 30 секунд.
+          <strong>💡 Продакшен:</strong> Если вы деплоите на Render, Railway или другой платформе, убедитесь что в Environment Variables установлена переменная <code>WEBHOOK_URL</code> с вашим доменом.
+        </p>
+        <p className="text-xs text-blue-600 dark:text-blue-500 mt-2">
+          Пример: <code>WEBHOOK_URL=https://your-app.onrender.com/api/v1/webhooks/whatsapp</code>
         </p>
       </div>
     </div>

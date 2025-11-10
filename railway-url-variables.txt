@@ -1,0 +1,2 @@
+WEBHOOK_URL=https://web-production-f996b.up.railway.app/api/v1/webhooks/whatsapp
+ALLOWED_ORIGINS=https://web-production-f996b.up.railway.app

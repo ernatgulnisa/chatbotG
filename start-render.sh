@@ -28,6 +28,10 @@ alembic upgrade head || echo "⚠️ Migrations skipped (may already be applied)
 echo "🗄️ Initializing database..."
 python init_db.py || echo "✅ Database already initialized"
 
+# Инициализация шаблонов ботов
+echo "🤖 Initializing bot templates..."
+python init_bot_templates.py || echo "✅ Bots already initialized"
+
 # Запуск FastAPI с uvicorn
 echo "🌐 Starting FastAPI server on port ${PORT:-8000}..."
 exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
