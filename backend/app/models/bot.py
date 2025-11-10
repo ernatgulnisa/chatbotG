@@ -51,13 +51,21 @@ class BotScenario(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     
-    # Flow data (React Flow format)
-    flow_data = Column(JSON, nullable=False, default={
+    # Trigger configuration
+    trigger_type = Column(String, default="flow")  # "flow", "keyword", "regex"
+    trigger_value = Column(JSON, default=[])  # Keywords or regex patterns
+    
+    # Response (for simple keyword scenarios)
+    response_message = Column(Text, nullable=True)  # Simple text response
+    priority = Column(Integer, default=100)  # Lower number = higher priority
+    
+    # Flow data (React Flow format) - for complex scenarios
+    flow_data = Column(JSON, nullable=True, default={
         "nodes": [],
         "edges": []
     })
     
-    # Trigger
+    # Legacy trigger (keeping for compatibility)
     trigger_keywords = Column(JSON, default=[])  # Keywords to start this scenario
     is_default = Column(Boolean, default=False)  # Default scenario
     

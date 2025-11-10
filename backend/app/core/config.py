@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     
     class Config:
-        env_file = "../.env"
+        env_file = ".env"
         case_sensitive = True
         extra = "ignore"  # Игнорировать лишние переменные из .env
 

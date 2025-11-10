@@ -25,7 +25,7 @@ def create_test_data():
             print(f"  Password: test123")
             return
         
-        # Create business
+        # Create business first (without owner)
         business = Business(
             name="Test Business",
             description="Тестовый бизнес для проверки функций",
@@ -46,12 +46,15 @@ def create_test_data():
             is_verified=True,
             business_id=business.id
         )
+        db.add(user)
+        db.flush()
         
         # Update business owner
         business.owner_id = user.id
         
-        db.add(user)
         db.commit()
+        db.refresh(user)
+        db.refresh(business)
         
         print("✅ Тестовые данные успешно созданы!")
         print("\n📋 Данные для входа:")

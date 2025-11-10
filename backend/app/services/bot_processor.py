@@ -59,15 +59,6 @@ class BotProcessor:
             if not bot or not bot.is_active:
                 return False
             
-            # Get active scenario
-            scenario = self.db.query(BotScenario).filter(
-                BotScenario.bot_id == bot.id,
-                BotScenario.is_active == True
-            ).order_by(BotScenario.version.desc()).first()
-            
-            if not scenario:
-                return False
-            
             # Get WhatsApp service
             whatsapp_service = await get_whatsapp_service(
                 conversation.whatsapp_number_id,
@@ -77,19 +68,123 @@ class BotProcessor:
             if not whatsapp_service:
                 return False
             
-            # Process through scenario
-            await self._execute_scenario(
-                conversation,
-                message,
-                scenario,
-                whatsapp_service
-            )
+            # First, try to match keyword scenarios
+            matched_scenario = await self._match_keyword_scenario(bot, message)
             
-            return True
+            if matched_scenario:
+                # Send response from matched scenario
+                await self._send_scenario_response(
+                    conversation,
+                    message,
+                    matched_scenario,
+                    whatsapp_service
+                )
+                return True
+            
+            # If no keyword match, check for flow-based scenario
+            flow_scenario = self.db.query(BotScenario).filter(
+                BotScenario.bot_id == bot.id,
+                BotScenario.is_active == True,
+                BotScenario.trigger_type == "flow"
+            ).order_by(BotScenario.version.desc()).first()
+            
+            if flow_scenario:
+                await self._execute_scenario(
+                    conversation,
+                    message,
+                    flow_scenario,
+                    whatsapp_service
+                )
+                return True
+            
+            # No scenario matched, send default response
+            if bot.default_response:
+                await whatsapp_service.send_text_message(
+                    to=conversation.customer.phone,
+                    text=bot.default_response
+                )
+                self._save_bot_message(conversation, bot.default_response, "text")
+                return True
+            
+            return False
             
         except Exception as e:
             print(f"Error processing message through bot: {e}")
+            import traceback
+            traceback.print_exc()
             return False
+    
+    async def _match_keyword_scenario(
+        self,
+        bot: Bot,
+        message: Message
+    ) -> Optional[BotScenario]:
+        """
+        Match message content against keyword scenarios
+        
+        Returns:
+            Matched BotScenario or None
+        """
+        import json
+        
+        # Get all active keyword scenarios
+        scenarios = self.db.query(BotScenario).filter(
+            BotScenario.bot_id == bot.id,
+            BotScenario.is_active == True,
+            BotScenario.trigger_type == "keyword"
+        ).order_by(BotScenario.priority.asc()).all()
+        
+        if not scenarios:
+            return None
+        
+        message_text = message.content.lower().strip()
+        
+        # Try to match each scenario
+        for scenario in scenarios:
+            try:
+                keywords = json.loads(scenario.trigger_value)
+                
+                for keyword in keywords:
+                    keyword_lower = keyword.lower().strip()
+                    
+                    # Check if keyword is in message
+                    if keyword_lower in message_text or message_text in keyword_lower:
+                        return scenario
+                    
+                    # Check exact match for numbers
+                    if message_text == keyword_lower:
+                        return scenario
+                        
+            except Exception as e:
+                print(f"Error parsing scenario keywords: {e}")
+                continue
+        
+        return None
+    
+    async def _send_scenario_response(
+        self,
+        conversation: Conversation,
+        incoming_message: Message,
+        scenario: BotScenario,
+        whatsapp_service: WhatsAppService
+    ):
+        """Send response from matched scenario"""
+        try:
+            response_text = scenario.response_message
+            
+            if response_text:
+                await whatsapp_service.send_text_message(
+                    to=conversation.customer.phone,
+                    text=response_text
+                )
+                
+                # Save bot response
+                self._save_bot_message(conversation, response_text, "text")
+                
+        except Exception as e:
+            print(f"Error sending scenario response: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def _execute_scenario(
         self,

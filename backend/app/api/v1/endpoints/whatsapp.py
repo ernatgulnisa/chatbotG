@@ -76,9 +76,9 @@ async def create_whatsapp_number(
         env_manager.update_whatsapp_phone_number_id(number_data.phone_number_id)
         if number_data.waba_id:
             env_manager.update_whatsapp_business_account_id(number_data.waba_id)
-        print(f"✅ .env file updated with WhatsApp credentials")
+        print("[OK] .env file updated with WhatsApp credentials")
     except Exception as e:
-        print(f"⚠️ Warning: Failed to update .env file: {e}")
+        print(f"[WARNING] Failed to update .env file: {e}")
         # Don't fail the request if .env update fails
     
     return db_number
@@ -145,9 +145,9 @@ async def update_whatsapp_number(
             env_manager.update_whatsapp_phone_number_id(update_data["phone_number_id"])
         if "waba_id" in number_data.dict(exclude_unset=True) and number_data.waba_id:
             env_manager.update_whatsapp_business_account_id(number_data.waba_id)
-        print(f"✅ .env file updated with WhatsApp credentials")
+        print("[OK] .env file updated with WhatsApp credentials")
     except Exception as e:
-        print(f"⚠️ Warning: Failed to update .env file: {e}")
+        print(f"[WARNING] Failed to update .env file: {e}")
         # Don't fail the request if .env update fails
     
     return number
