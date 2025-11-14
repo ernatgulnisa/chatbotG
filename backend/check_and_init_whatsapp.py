@@ -65,6 +65,28 @@ def check_and_create_data():
         print()
         print("=" * 60)
         
+        # Get environment variables
+        env_phone_number = os.getenv('WHATSAPP_PHONE_NUMBER')
+        env_phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
+        
+        # Check if we need to update existing WhatsApp number with env vars
+        needs_update = False
+        if whatsapp_count > 0 and env_phone_number_id:
+            existing = db.query(WhatsAppNumber).first()
+            if existing.phone_number_id != env_phone_number_id:
+                print()
+                print(f"🔄 Updating WhatsApp number with environment variables...")
+                print(f"   Old ID: {existing.phone_number_id}")
+                print(f"   New ID: {env_phone_number_id}")
+                existing.phone_number_id = env_phone_number_id
+                if env_phone_number:
+                    existing.phone_number = env_phone_number
+                    print(f"   New Phone: {env_phone_number}")
+                db.commit()
+                print(f"✅ WhatsApp number updated successfully!")
+                print("=" * 60)
+                needs_update = True
+        
         # If no data, create it
         if whatsapp_count == 0 or business_count == 0 or user_count == 0:
             print()
@@ -107,13 +129,18 @@ def check_and_create_data():
             # Create WhatsApp number if needed
             if whatsapp_count == 0:
                 # Get from environment or use default
-                phone_number = os.getenv('WHATSAPP_PHONE_NUMBER', '+1234567890')
-                phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID', 'demo_phone_id')
+                phone_number = env_phone_number or '+1234567890'
+                phone_number_id = env_phone_number_id or 'demo_phone_id'
+                
+                print(f"📱 Creating WhatsApp number:")
+                print(f"   Phone: {phone_number}")
+                print(f"   ID: {phone_number_id}")
+                print(f"   Source: {'Environment Variables' if env_phone_number_id else 'Default Values'}")
                 
                 whatsapp_number = WhatsAppNumber(
                     business_id=business.id,
                     phone_number=phone_number,
-                    display_name='Demo WhatsApp',
+                    display_name='My WhatsApp Business' if env_phone_number_id else 'Demo WhatsApp',
                     provider='meta',
                     phone_number_id=phone_number_id,
                     status='connected',
@@ -133,7 +160,7 @@ def check_and_create_data():
             print(f"   Email: admin@chatbot.com")
             print(f"   Password: admin123")
             print("=" * 60)
-        else:
+        elif not needs_update:
             print("✅ All data exists, nothing to create")
             print("=" * 60)
             
