@@ -28,11 +28,15 @@ alembic upgrade head || echo "⚠️ Migrations skipped (may already be applied)
 echo "🗄️ Initializing database..."
 python init_db.py || echo "✅ Database already initialized"
 
-# Инициализация шаблонов ботов (автоматически создаст тестовые данные если нужно)
-echo "🤖 Initializing bot templates..."
-python init_bot_templates.py || {
-    echo "⚠️ Bot templates initialization failed, but continuing..."
-    echo "   You can add WhatsApp number manually through the web interface"
+# Проверка и создание WhatsApp данных (приоритетная проверка)
+echo "📱 Checking WhatsApp configuration..."
+python check_and_init_whatsapp.py || {
+    echo "⚠️ WhatsApp check failed, trying fallback initialization..."
+    # Fallback to bot templates
+    python init_bot_templates.py || {
+        echo "⚠️ Bot templates initialization also failed"
+        echo "   You can add WhatsApp number manually through web interface"
+    }
 }
 
 # Запуск FastAPI с uvicorn
