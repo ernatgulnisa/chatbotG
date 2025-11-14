@@ -201,87 +201,69 @@ logger.error(
 
 ### 5. 🎯 Message Queue для background tasks
 
-**Приоритет: HIGH**
+**Статус: ЗАВЕРШЕНО** ✅  
+**Тесты: 8/8 PASSED** 🎯
 
-**Проблема:**
+**Реализовано:**
+- ✅ `backend/app/core/celery_app.py` - Celery конфигурация
+- ✅ `backend/app/tasks/whatsapp_tasks.py` - WhatsApp задачи (text, media, template)
+- ✅ `backend/app/api/v1/endpoints/conversations.py` - использование Celery вместо BackgroundTasks
+- ✅ `backend/tests/test_celery_tasks.py` - тесты (8 tests)
+
+**Результаты:**
 
 ```python
-background_tasks.add_task(send_whatsapp_message, ...)
-# Если сервер упадет - task потеряется!
-```
-
-**Решение:** Использовать Celery (уже в requirements!)
-
-```python
-# backend/app/tasks/celery_app.py
-from celery import Celery
-from app.core.config import settings
-
-celery_app = Celery(
-    "chatbot",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL
+# ❌ Было: FastAPI BackgroundTasks (теряются при перезапуске)
+background_tasks.add_task(
+    send_whatsapp_message,
+    conversation=conversation,
+    message=message,
+    db=db
 )
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    task_time_limit=30 * 60,  # 30 minutes
-    task_soft_time_limit=25 * 60,
+# ✅ Стало: Celery (гарантированная доставка!)
+send_text_message_task.delay(
+    conversation_id=conversation.id,
+    message_id=message.id,
+    whatsapp_number_id=whatsapp_number.id,
+    phone_number_id=whatsapp_number.phone_number_id,
+    access_token=whatsapp_number.access_token,
+    to_number=conversation.customer.phone_number,
+    text_content=message.content
 )
-
-# backend/app/tasks/whatsapp_tasks.py
-from app.tasks.celery_app import celery_app
-
-@celery_app.task(bind=True, max_retries=3)
-def send_whatsapp_message_task(self, conversation_id: int, message_id: int):
-    """Celery task for sending WhatsApp messages"""
-    try:
-        # Get fresh data from DB
-        db = SessionLocal()
-        conversation = db.query(Conversation).get(conversation_id)
-        message = db.query(Message).get(message_id)
-
-        # Send
-        result = await send_whatsapp_message(conversation, message, db)
-        return {"status": "success", "result": result}
-
-    except Exception as exc:
-        # Retry with exponential backoff
-        raise self.retry(exc=exc, countdown=2 ** self.request.retries)
-
-# Использование в endpoint:
-@router.post("/{conversation_id}/messages")
-async def send_message(...):
-    # Создаем message в DB
-    db.add(message)
-    db.commit()
-
-    # Отправляем в очередь (гарантированная доставка!)
-    send_whatsapp_message_task.delay(conversation.id, message.id)
-
-    return message
 ```
 
 **Impact:**
-
 - ✅ Гарантированная доставка (даже при перезапуске)
-- ✅ Retry с exponential backoff
-- ✅ Мониторинг через Flower
-- ✅ Priority queues
-- ✅ Rate limiting
+- ✅ Retry с exponential backoff (3x: 60s, 120s, 180s)
+- ✅ Мониторинг через Flower (http://localhost:5555)
+- ✅ Priority queues (whatsapp, broadcasts)
+- ✅ Rate limiting на уровне Celery
+
+**Запуск:**
+
+```powershell
+# 1. Start Redis
+redis-server
+
+# 2. Start Celery Worker
+cd backend
+celery -A app.core.celery_app worker --loglevel=info -Q whatsapp,broadcasts
+
+# 3. Optional: Start Flower (monitoring)
+celery -A app.core.celery_app flower
+
+# 4. Start FastAPI
+uvicorn app.main:app --reload
+```
+
+**Тесты:** `backend/tests/test_celery_tasks.py`
 
 ---
 
-## 🟡 ВАЖНЫЕ улучшения (сделать в течение недели)
-
 ### 6. 🔐 Rate Limiting
 
-**Приоритет: MEDIUM**
+**Приоритет: HIGH**
 
 ```python
 # backend/app/middleware/rate_limiter.py
@@ -1059,7 +1041,7 @@ async def add_security_headers(request: Request, call_next):
 | 18. Query Optimization    | 🔥 HIGH   | 🟡 MEDIUM | **MEDIUM**   | ✅ DONE |
 | 19. Response Compression  | 🟡 MEDIUM | ✅ LOW    | **LOW**      | ✅ DONE |
 | 22. Security Headers      | 🔥 HIGH   | ✅ LOW    | **HIGH**     | ✅ DONE |
-| 5. Message Queue (Celery) | 🔥 HIGH   | 🔴 HIGH   | **HIGH**     | 🔄 NEXT |
+| 5. Message Queue (Celery) | 🔥 HIGH   | 🔴 HIGH   | **HIGH**     | ✅ DONE |
 | 6. Rate Limiting          | 🟡 MEDIUM | ✅ LOW    | **HIGH**     | 📋 TODO |
 | 8. DB Connection Pool     | 🟡 MEDIUM | ✅ LOW    | **MEDIUM**   | 📋 TODO |
 | 9. Metrics/Monitoring     | 🔥 HIGH   | 🟡 MEDIUM | **MEDIUM**   | 📋 TODO |
@@ -1069,7 +1051,7 @@ async def add_security_headers(request: Request, call_next):
 
 ## 📋 Action Plan (Progress Update)
 
-### ✅ Completed (Week 1)
+### ✅ Completed (Week 1-2)
 
 - [x] ✅ Replace print() with logging (Step 1)
 - [x] ✅ Implement retry mechanism for WhatsApp (Step 2) - 7/7 tests
@@ -1078,13 +1060,17 @@ async def add_security_headers(request: Request, call_next):
 - [x] ✅ Response compression GZip (Step 19) - 10/10 tests
 - [x] ✅ Security headers middleware (Step 22) - 20/20 tests, 77.55% coverage
 - [x] ✅ Local SQLite database configured
+- [x] ✅ **Message Queue with Celery (Step 5) - 8/8 tests** 🎯
 
 ### 🔄 In Progress
 
-- [ ] 🔄 Setup Celery for background tasks (Step 5)
-- [ ] 🔄 PostgreSQL cloud database setup
+- [ ] PostgreSQL cloud database setup (optional)
 
-### 📋 Week 2 Priorities
+### 📋 Week 3 Priorities
+
+- [ ] Step 6: Rate Limiting (HIGH)
+- [ ] Step 8: Database Connection Pooling (MEDIUM)
+- [ ] Step 9: Metrics & Monitoring (MEDIUM)
 
 ---
 
