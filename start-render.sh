@@ -28,10 +28,13 @@ alembic upgrade head || echo "⚠️ Migrations skipped (may already be applied)
 echo "🗄️ Initializing database..."
 python init_db.py || echo "✅ Database already initialized"
 
-# Инициализация шаблонов ботов
+# Инициализация шаблонов ботов (автоматически создаст тестовые данные если нужно)
 echo "🤖 Initializing bot templates..."
-python init_bot_templates.py || echo "✅ Bots already initialized"
+python init_bot_templates.py || {
+    echo "⚠️ Bot templates initialization failed, but continuing..."
+    echo "   You can add WhatsApp number manually through the web interface"
+}
 
 # Запуск FastAPI с uvicorn
-echo "🌐 Starting FastAPI server on port ${PORT:-8000}..."
-exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+echo "🌐 Starting FastAPI server on port ${PORT:-10000}..."
+exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}

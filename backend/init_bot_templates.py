@@ -8,9 +8,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.core.database import SessionLocal
 from app.models.user import User
+from app.models.business import Business
 from app.models.whatsapp_number import WhatsAppNumber
 from app.models.bot import Bot, BotScenario
+from app.core.security import get_password_hash
 import json
+import os
 
 
 def create_bot_templates():
@@ -22,8 +25,64 @@ def create_bot_templates():
         whatsapp_number = db.query(WhatsAppNumber).first()
         
         if not whatsapp_number:
-            print("❌ WhatsApp номер не найден. Сначала добавьте номер!")
-            return
+            print("⚠️  WhatsApp номер не найден. Создаю тестовые данные...")
+            
+            # Create test user and business
+            from app.models.business import Business
+            from app.core.security import get_password_hash
+            import os
+            
+            # Check if user exists
+            user = db.query(User).filter(User.email == 'admin@chatbot.com').first()
+            
+            if not user:
+                user = User(
+                    email='admin@chatbot.com',
+                    full_name='Admin User',
+                    hashed_password=get_password_hash('admin123'),
+                    role='owner',
+                    is_active=True,
+                    is_verified=True
+                )
+                db.add(user)
+                db.flush()
+                print(f"✓ User created: {user.email}")
+            
+            # Check if business exists
+            business = db.query(Business).filter(Business.owner_id == user.id).first()
+            
+            if not business:
+                business = Business(
+                    name='Demo Business',
+                    description='Demo business for testing',
+                    owner_id=user.id,
+                    is_active=True
+                )
+                db.add(business)
+                db.flush()
+                
+                # Update user with business_id
+                user.business_id = business.id
+                print(f"✓ Business created: {business.name}")
+            
+            # Create WhatsApp number
+            phone_number = os.getenv('WHATSAPP_PHONE_NUMBER', '+1234567890')
+            phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID', 'demo_phone_id')
+            
+            whatsapp_number = WhatsAppNumber(
+                business_id=business.id,
+                phone_number=phone_number,
+                display_name='Demo WhatsApp',
+                provider='meta',
+                phone_number_id=phone_number_id,
+                status='connected',
+                is_active=True
+            )
+            db.add(whatsapp_number)
+            db.flush()
+            
+            print(f"✓ WhatsApp number created: {whatsapp_number.phone_number}")
+            print()
         
         business_id = whatsapp_number.business_id
         print(f"✓ WhatsApp номер найден: {whatsapp_number.phone_number}")
