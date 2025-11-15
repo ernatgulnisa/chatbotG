@@ -1,9 +1,11 @@
 """
 WhatsApp Cloud API Service
 Handles sending and receiving messages via Meta Cloud API
+Auto-creates WhatsApp numbers from webhooks
 """
 import httpx
 import json
+import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -12,6 +14,18 @@ from app.core.database import SessionLocal
 from app.models.whatsapp_number import WhatsAppNumber
 from app.models.conversation import Message, Conversation
 from app.models.customer import Customer
+from app.utils.retry_decorator import whatsapp_retry
+from app.utils.structured_logger import get_structured_logger
+from app.utils.metrics import (
+    track_whatsapp_message_sent,
+    track_whatsapp_message_received,
+    track_whatsapp_error,
+    track_whatsapp_retry,
+    MetricsTimer,
+    whatsapp_send_duration_seconds
+)
+
+logger = get_structured_logger(__name__)
 
 
 class WhatsAppService:
@@ -26,6 +40,7 @@ class WhatsAppService:
             "Content-Type": "application/json"
         }
     
+    @whatsapp_retry
     async def send_text_message(
         self,
         to: str,
@@ -33,7 +48,7 @@ class WhatsAppService:
         preview_url: bool = False
     ) -> Dict[str, Any]:
         """
-        Send a text message
+        Send a text message with automatic retry on network errors.
         
         Args:
             to: Recipient phone number (with country code, no +)
@@ -42,7 +57,18 @@ class WhatsAppService:
             
         Returns:
             API response with message ID
+            
+        Raises:
+            httpx.HTTPStatusError: On 4xx client errors (no retry)
+            httpx.NetworkError: On network errors (auto-retry up to 3 times)
         """
+        logger.info_with_context(
+            "Sending WhatsApp text message",
+            customer_phone=to[:4] + "****",
+            whatsapp_number_id=self.phone_number_id,
+            message_length=len(text)
+        )
+        
         payload = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
@@ -54,16 +80,48 @@ class WhatsAppService:
             }
         }
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/messages",
-                headers=self.headers,
-                json=payload,
-                timeout=30.0
+        # Track metrics
+        start_time = datetime.now()
+        business_id = "default"  # Will be set from context if available
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/messages",
+                    headers=self.headers,
+                    json=payload,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                result = response.json()
+                
+                # Track successful send
+                duration = (datetime.now() - start_time).total_seconds()
+                track_whatsapp_message_sent(
+                    business_id=business_id,
+                    message_type="text",
+                    status="sent",
+                    duration=duration
+                )
+                
+                return result
+                
+        except httpx.HTTPStatusError as e:
+            # Track error
+            track_whatsapp_error(
+                error_code=str(e.response.status_code),
+                error_type="http_error"
             )
-            response.raise_for_status()
-            return response.json()
+            raise
+        except Exception as e:
+            # Track general error
+            track_whatsapp_error(
+                error_code="unknown",
+                error_type=type(e).__name__
+            )
+            raise
     
+    @whatsapp_retry
     async def send_template_message(
         self,
         to: str,
@@ -72,7 +130,7 @@ class WhatsAppService:
         components: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
-        Send a template message (for initial contact)
+        Send a template message (for initial contact) with automatic retry.
         
         Args:
             to: Recipient phone number
@@ -83,6 +141,14 @@ class WhatsAppService:
         Returns:
             API response
         """
+        logger.info_with_context(
+            "Sending WhatsApp template message",
+            customer_phone=to[:4] + "****",
+            template_name=template_name,
+            language_code=language_code,
+            whatsapp_number_id=self.phone_number_id
+        )
+        
         payload = {
             "messaging_product": "whatsapp",
             "to": to,
@@ -108,6 +174,7 @@ class WhatsAppService:
             response.raise_for_status()
             return response.json()
     
+    @whatsapp_retry
     async def send_interactive_buttons(
         self,
         to: str,
@@ -177,6 +244,7 @@ class WhatsAppService:
             response.raise_for_status()
             return response.json()
     
+    @whatsapp_retry
     async def send_interactive_list(
         self,
         to: str,
@@ -238,6 +306,7 @@ class WhatsAppService:
             response.raise_for_status()
             return response.json()
     
+    @whatsapp_retry
     async def send_media_message(
         self,
         to: str,
@@ -247,7 +316,7 @@ class WhatsAppService:
         caption: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Send media message (image, video, document, audio)
+        Send media message (image, video, document, audio) with automatic retry.
         
         Args:
             to: Recipient phone number
@@ -259,6 +328,14 @@ class WhatsAppService:
         Returns:
             API response
         """
+        logger.info_with_context(
+            "Sending WhatsApp media message",
+            customer_phone=to[:4] + "****",
+            media_type=media_type,
+            whatsapp_number_id=self.phone_number_id,
+            has_caption=bool(caption)
+        )
+        
         media_object = {}
         if media_id:
             media_object["id"] = media_id
@@ -288,6 +365,7 @@ class WhatsAppService:
             response.raise_for_status()
             return response.json()
     
+    @whatsapp_retry
     async def upload_media(
         self,
         file_path: str,
@@ -325,6 +403,7 @@ class WhatsAppService:
                 result = response.json()
                 return result["id"]
     
+    @whatsapp_retry
     async def mark_as_read(self, message_id: str) -> Dict[str, Any]:
         """
         Mark message as read
@@ -412,6 +491,54 @@ class WhatsAppService:
             print(f"📝 Type: {message_type}")
             print(f"🆔 Message ID: {message_id}")
             
+            # Get WhatsApp number metadata
+            phone_number_id = value.get("metadata", {}).get("phone_number_id")
+            display_phone_number = value.get("metadata", {}).get("display_phone_number")
+            
+            print(f"📞 phone_number_id: {phone_number_id}")
+            print(f"📞 display_phone_number: {display_phone_number}")
+            
+            # Get or create WhatsApp number
+            whatsapp_number = db.query(WhatsAppNumber).filter(
+                WhatsAppNumber.phone_number_id == phone_number_id
+            ).first()
+            
+            if not whatsapp_number:
+                print(f"� WhatsApp number not found in database, creating: {phone_number_id}")
+                
+                # Import Business model
+                from app.models.business import Business
+                
+                # Try to find existing business or create a default one
+                business = db.query(Business).first()
+                
+                if not business:
+                    print(f"🏢 No business found, creating default business")
+                    business = Business(
+                        name="Default Business",
+                        phone=display_phone_number or "Unknown",
+                        email="business@example.com"
+                    )
+                    db.add(business)
+                    db.flush()
+                    print(f"✅ Business created: ID={business.id}, Name={business.name}")
+                
+                # Create WhatsApp number
+                whatsapp_number = WhatsAppNumber(
+                    business_id=business.id,
+                    phone_number=display_phone_number or phone_number_id,
+                    display_name=f"WhatsApp {display_phone_number or phone_number_id}",
+                    phone_number_id=phone_number_id,
+                    provider="meta",
+                    status="connected",
+                    is_active=True
+                )
+                db.add(whatsapp_number)
+                db.flush()
+                print(f"✅ WhatsApp number created: ID={whatsapp_number.id}, Number={whatsapp_number.phone_number}")
+            else:
+                print(f"✅ WhatsApp number found: {whatsapp_number.display_name} ({whatsapp_number.phone_number})")
+            
             # Get or create customer
             customer = db.query(Customer).filter(
                 Customer.phone_number == from_number
@@ -423,18 +550,8 @@ class WhatsAppService:
                 contacts = value.get("contacts", [])
                 contact_name = contacts[0].get("profile", {}).get("name") if contacts else None
                 
-                # Get business_id from whatsapp_number
-                phone_number_id = value.get("metadata", {}).get("phone_number_id")
-                whatsapp_number_temp = db.query(WhatsAppNumber).filter(
-                    WhatsAppNumber.phone_number_id == phone_number_id
-                ).first()
-                
-                if not whatsapp_number_temp:
-                    print(f"❌ WhatsApp number not found: {phone_number_id}")
-                    return None
-                
                 customer = Customer(
-                    business_id=whatsapp_number_temp.business_id,
+                    business_id=whatsapp_number.business_id,
                     phone_number=from_number,
                     name=contact_name or f"Customer {from_number}"
                 )
@@ -445,16 +562,7 @@ class WhatsAppService:
                 print(f"✅ Customer found: ID={customer.id}, Name={customer.name}")
             
             # Get or create conversation
-            phone_number_id = value.get("metadata", {}).get("phone_number_id")
-            whatsapp_number = db.query(WhatsAppNumber).filter(
-                WhatsAppNumber.phone_number_id == phone_number_id
-            ).first()
-            
-            if not whatsapp_number:
-                print(f"❌ WhatsApp number not found: {phone_number_id}")
-                return None
-            
-            print(f"📞 WhatsApp number: {whatsapp_number.display_name} ({whatsapp_number.phone_number})")
+            print(f"📞 Using WhatsApp number: {whatsapp_number.display_name} ({whatsapp_number.phone_number})")
             
             conversation = db.query(Conversation).filter(
                 Conversation.customer_id == customer.id,
@@ -554,13 +662,34 @@ async def get_whatsapp_service(
         return None
     
     from app.core.security import encryption
+    from app.utils.structured_logger import get_structured_logger
+    
+    logger = get_structured_logger(__name__)
     
     try:
+        if not whatsapp_number.api_token:
+            logger.error("WhatsApp number has no API token", extra={
+                "whatsapp_number_id": whatsapp_number_id,
+                "phone_number": whatsapp_number.phone_number
+            })
+            return None
+            
         access_token = encryption.decrypt(whatsapp_number.api_token)
+        
+        if not access_token:
+            logger.error("Failed to decrypt API token (empty result)", extra={
+                "whatsapp_number_id": whatsapp_number_id
+            })
+            return None
+            
         return WhatsAppService(
             phone_number_id=whatsapp_number.phone_number_id,
             access_token=access_token
         )
     except Exception as e:
-        print(f"Error creating WhatsApp service: {e}")
+        logger.error(f"Error creating WhatsApp service: {e}", extra={
+            "whatsapp_number_id": whatsapp_number_id,
+            "error_type": type(e).__name__,
+            "phone_number_id": whatsapp_number.phone_number_id if whatsapp_number else None
+        }, exc_info=True)
         return None
