@@ -39,6 +39,10 @@ python check_and_init_whatsapp.py || {
     }
 }
 
+# Initialize WhatsApp token from environment (if configured)
+echo "🔐 Initializing WhatsApp token from environment..."
+python init_whatsapp_token.py || echo "ℹ️  Token initialization skipped"
+
 # Запуск FastAPI с uvicorn
 echo "🌐 Starting FastAPI server on port ${PORT:-10000}..."
 exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}
