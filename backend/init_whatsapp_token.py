@@ -2,6 +2,7 @@
 """
 Initialize WhatsApp token from environment on first startup.
 This runs automatically on Render deployment.
+Version: 1.0.1
 """
 import os
 import sys
