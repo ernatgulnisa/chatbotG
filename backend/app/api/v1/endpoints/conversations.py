@@ -6,7 +6,7 @@ from typing import List, Optional
 import logging
 
 from app.core.database import get_db
-from app.core.security import get_current_active_user
+from app.core.security import get_current_active_user, encryption
 from app.core.database_utils import atomic_transaction
 from app.core.rate_limiter import limiter, WHATSAPP_SEND_LIMIT, WHATSAPP_MEDIA_LIMIT
 from app.models.user import User
@@ -215,6 +215,9 @@ async def send_message(
     db.commit()
     db.refresh(message)
     
+    # Decrypt API token before sending to Celery
+    decrypted_token = encryption.decrypt(whatsapp_number.api_token)
+    
     # Send via WhatsApp using Celery (guaranteed delivery!)
     send_text_message_task.delay(
         conversation_id=conversation.id,
@@ -222,7 +225,7 @@ async def send_message(
         whatsapp_number_id=whatsapp_number.id,
         phone_number_id=whatsapp_number.phone_number_id,
         waba_id=whatsapp_number.waba_id or "",
-        access_token=whatsapp_number.access_token,
+        access_token=decrypted_token,
         to_number=conversation.customer.phone_number,
         text_content=message.content
     )
@@ -293,6 +296,9 @@ async def send_media_message(
     db.commit()
     db.refresh(message)
     
+    # Decrypt API token before sending to Celery
+    decrypted_token = encryption.decrypt(whatsapp_number.api_token)
+    
     # Send via WhatsApp using Celery
     send_media_message_task.delay(
         conversation_id=conversation.id,
@@ -300,7 +306,7 @@ async def send_media_message(
         whatsapp_number_id=whatsapp_number.id,
         phone_number_id=whatsapp_number.phone_number_id,
         waba_id=whatsapp_number.waba_id or "",
-        access_token=whatsapp_number.access_token,
+        access_token=decrypted_token,
         to_number=conversation.customer.phone_number,
         media_type=media_type,
         file_path=file_path,
