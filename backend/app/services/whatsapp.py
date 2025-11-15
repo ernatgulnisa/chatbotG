@@ -603,6 +603,13 @@ class WhatsAppService:
                 media = message_data.get(message_type, {})
                 media_url = media.get("id")  # Store media ID
                 content = media.get("caption", f"[{message_type.upper()}]")
+            elif message_type == "unsupported":
+                # Handle unsupported message types (skip saving)
+                print(f"⚠️ Skipping unsupported message type")
+                errors = message_data.get("errors", [])
+                if errors:
+                    print(f"⚠️ Error: {errors[0].get('title', 'Unknown error')}")
+                return None
             
             print(f"💭 Content: {content[:100]}...")
             

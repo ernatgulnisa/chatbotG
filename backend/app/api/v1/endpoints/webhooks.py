@@ -1,11 +1,9 @@
 """Webhook endpoints for WhatsApp"""
-from fastapi import APIRouter, Request, Response, status, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Request, Response, status, HTTPException, BackgroundTasks
 from typing import Dict, Any
 import json
 import os
 
-from app.core.database import get_db
 from app.services.whatsapp import WhatsAppService
 from app.core.config import settings
 
@@ -63,8 +61,7 @@ async def verify_whatsapp_webhook(
 @router.post("/whatsapp", tags=["Webhooks"])
 async def handle_whatsapp_webhook(
     request: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks
 ):
     """
     Handle incoming WhatsApp webhook events
@@ -81,11 +78,10 @@ async def handle_whatsapp_webhook(
         # Log webhook for debugging
         print(f"WhatsApp Webhook received: {json.dumps(webhook_data, indent=2)}")
         
-        # Process webhook in background
+        # Process webhook in background (don't pass db, create new session inside)
         background_tasks.add_task(
             process_whatsapp_webhook,
-            webhook_data,
-            db
+            webhook_data
         )
         
         # Must respond 200 OK immediately to Meta
@@ -97,14 +93,20 @@ async def handle_whatsapp_webhook(
         return Response(status_code=status.HTTP_200_OK)
 
 
-async def process_whatsapp_webhook(webhook_data: Dict[str, Any], db: Session):
+async def process_whatsapp_webhook(webhook_data: Dict[str, Any]):
     """
     Process WhatsApp webhook data
     
     Args:
         webhook_data: Webhook payload from Meta
-        db: Database session
     """
+    # Create new database session for background task
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    # Create new database session for background task
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    
     try:
         # Extract entry
         entry = webhook_data.get("entry", [])[0] if webhook_data.get("entry") else None
@@ -149,9 +151,12 @@ async def process_whatsapp_webhook(webhook_data: Dict[str, Any], db: Session):
         print(f"Error processing webhook: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Close database session
+        db.close()
 
 
-async def handle_message_status(statuses: list, db: Session):
+async def handle_message_status(statuses: list, db):
     """
     Handle message status updates (sent, delivered, read, failed)
     
@@ -159,15 +164,15 @@ async def handle_message_status(statuses: list, db: Session):
         statuses: List of status updates
         db: Database session
     """
-    from app.models.message import Message
+    from app.models.conversation import Message as ConversationMessage
     
     for status_data in statuses:
         message_id = status_data.get("id")
         status_value = status_data.get("status")
         
         # Update message status in database
-        message = db.query(Message).filter(
-            Message.whatsapp_message_id == message_id
+        message = db.query(ConversationMessage).filter(
+            ConversationMessage.whatsapp_message_id == message_id
         ).first()
         
         if message:
