@@ -7,7 +7,6 @@ import logging
 
 from app.core.database import get_db
 from app.core.security import get_current_active_user, encryption
-from app.core.database_utils import atomic_transaction
 from app.core.rate_limiter import limiter, WHATSAPP_SEND_LIMIT, WHATSAPP_MEDIA_LIMIT
 from app.models.user import User
 from app.models.conversation import Conversation, Message
