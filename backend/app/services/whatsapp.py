@@ -107,6 +107,19 @@ class WhatsAppService:
                 return result
                 
         except httpx.HTTPStatusError as e:
+            # Log detailed error from Meta
+            try:
+                error_detail = e.response.json()
+                logger.error(f"Meta API error: {error_detail}", extra={
+                    "status_code": e.response.status_code,
+                    "url": str(e.request.url),
+                    "phone_number_id": self.phone_number_id
+                })
+            except:
+                logger.error(f"Meta API error (no JSON): {e.response.text}", extra={
+                    "status_code": e.response.status_code
+                })
+            
             # Track error
             track_whatsapp_error(
                 error_code=str(e.response.status_code),
