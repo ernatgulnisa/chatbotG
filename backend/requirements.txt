@@ -25,6 +25,10 @@ cryptography==42.0.0
 celery==5.3.6
 flower==2.0.1
 
+# Retry & Resilience
+tenacity==8.2.3
+slowapi==0.1.9
+
 # WebSocket
 python-socketio==5.11.0
 websockets==12.0
@@ -68,5 +72,10 @@ black==23.12.1
 flake8==7.0.0
 mypy==1.8.0
 
-# Monitoring (optional)
+# Type stubs
+types-redis==4.6.0.20240106
+types-requests==2.31.0.20240106
+
+# Monitoring
 sentry-sdk==1.39.2
+prometheus-client==0.19.0
