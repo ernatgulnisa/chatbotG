@@ -13,8 +13,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
-from app.core.encryption import encryption
+from app.core.security import EncryptionUtil
 from app.models.whatsapp_number import WhatsAppNumber
+
+# Initialize encryption
+encryption = EncryptionUtil()
 
 def init_token():
     """Initialize WhatsApp token from environment if not already set"""
