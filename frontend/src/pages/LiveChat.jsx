@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Search, User, Bot, Phone, MoreVertical, Archive } from 'lucide-react';
+import { Send, Search, User, Bot, Phone, MoreVertical, Archive, Paperclip, Image, File, Video } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 
@@ -10,8 +10,13 @@ export default function LiveChat() {
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUser, setTypingUser] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     loadConversations();
@@ -36,7 +41,12 @@ export default function LiveChat() {
   }, [messages]);
 
   const initializeSocket = () => {
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    // In production (Render), use same origin. In dev, use localhost
+    const backendUrl = import.meta.env.VITE_API_URL || 
+      (import.meta.env.MODE === 'production' ? window.location.origin : 'http://localhost:8000');
+    
+    console.log('Connecting to WebSocket:', backendUrl);
+    
     socketRef.current = io(backendUrl, {
       transports: ['websocket', 'polling']
     });
@@ -52,6 +62,20 @@ export default function LiveChat() {
       }
       // Update conversation list
       loadConversations();
+    });
+
+    socketRef.current.on('user_typing', (data) => {
+      console.log('User typing:', data);
+      if (selectedConversation && data.conversation_id === selectedConversation.id) {
+        setIsTyping(true);
+        setTypingUser(data.user);
+        
+        // Clear typing after 3 seconds
+        setTimeout(() => {
+          setIsTyping(false);
+          setTypingUser(null);
+        }, 3000);
+      }
     });
 
     socketRef.current.on('disconnect', () => {
@@ -114,6 +138,80 @@ export default function LiveChat() {
     } catch (error) {
       console.error('Failed to send message:', error);
       alert('Не удалось отправить сообщение');
+    }
+  };
+
+  const handleTyping = () => {
+    if (!socketRef.current || !selectedConversation) return;
+
+    // Emit typing event
+    socketRef.current.emit('typing', {
+      conversation_id: selectedConversation.id,
+      user: 'Agent'
+    });
+
+    // Clear previous timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout to stop typing after 2 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      socketRef.current.emit('stop_typing', {
+        conversation_id: selectedConversation.id
+      });
+    }, 2000);
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedConversation) return;
+
+    // Determine media type based on file type
+    let mediaType = 'document';
+    if (file.type.startsWith('image/')) {
+      mediaType = 'image';
+    } else if (file.type.startsWith('video/')) {
+      mediaType = 'video';
+    } else if (file.type.startsWith('audio/')) {
+      mediaType = 'audio';
+    }
+
+    try {
+      setUploadingFile(true);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('media_type', mediaType);
+      formData.append('caption', `Файл: ${file.name}`);
+
+      const response = await api.post(
+        `/conversations/${selectedConversation.id}/messages/media`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
+      setMessages(prev => [...prev, response.data]);
+
+      // Emit socket event
+      if (socketRef.current) {
+        socketRef.current.emit('send_message', {
+          room: `conversation_${selectedConversation.id}`,
+          message: response.data
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send file:', error);
+      alert('Не удалось отправить файл');
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -277,6 +375,23 @@ export default function LiveChat() {
                         : 'bg-white border border-gray-200 text-gray-900'
                     }`}
                   >
+                    {/* Media preview */}
+                    {msg.message_type === 'image' && msg.media_url && (
+                      <img src={msg.media_url} alt="Image" className="max-w-full rounded mb-2" />
+                    )}
+                    {msg.message_type === 'video' && msg.media_url && (
+                      <video src={msg.media_url} controls className="max-w-full rounded mb-2" />
+                    )}
+                    {msg.message_type === 'audio' && msg.media_url && (
+                      <audio src={msg.media_url} controls className="mb-2" />
+                    )}
+                    {msg.message_type === 'document' && msg.media_url && (
+                      <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mb-2">
+                        <File size={16} />
+                        <span>Документ</span>
+                      </a>
+                    )}
+                    
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                     <p
                       className={`text-xs mt-1 ${
@@ -291,6 +406,20 @@ export default function LiveChat() {
                   </div>
                 </div>
               ))}
+              
+              {/* Typing indicator */}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-gray-200 px-4 py-2 rounded-lg">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
 
@@ -298,9 +427,30 @@ export default function LiveChat() {
             <form onSubmit={sendMessage} className="p-4 border-t border-gray-200 bg-white">
               <div className="flex gap-2">
                 <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={selectedConversation.bot_active || uploadingFile}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Прикрепить файл"
+                >
+                  {uploadingFile ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                  ) : (
+                    <Paperclip size={20} />
+                  )}
+                </button>
+                <input
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={handleTyping}
                   placeholder="Введите сообщение..."
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   disabled={selectedConversation.bot_active}

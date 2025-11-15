@@ -1,7 +1,9 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// In production (Render), frontend and backend are on the same domain
+// Use empty string to make requests to the same origin
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.MODE === 'production' ? '' : 'http://localhost:8000')
 
 const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
