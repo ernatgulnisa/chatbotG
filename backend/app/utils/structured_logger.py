@@ -182,6 +182,28 @@ class StructuredLogger:
         """Internal method to log with context"""
         self.logger.log(level, message, extra=context, exc_info=exc_info)
     
+    # Standard logging methods (for compatibility)
+    def debug(self, message: str, *args, exc_info: Optional[Any] = None, extra: Optional[Dict] = None, **kwargs):
+        """Debug level log (standard logging interface)"""
+        self.logger.debug(message, *args, exc_info=exc_info, extra=extra or {}, **kwargs)
+    
+    def info(self, message: str, *args, exc_info: Optional[Any] = None, extra: Optional[Dict] = None, **kwargs):
+        """Info level log (standard logging interface)"""
+        self.logger.info(message, *args, exc_info=exc_info, extra=extra or {}, **kwargs)
+    
+    def warning(self, message: str, *args, exc_info: Optional[Any] = None, extra: Optional[Dict] = None, **kwargs):
+        """Warning level log (standard logging interface)"""
+        self.logger.warning(message, *args, exc_info=exc_info, extra=extra or {}, **kwargs)
+    
+    def error(self, message: str, *args, exc_info: Optional[Any] = None, extra: Optional[Dict] = None, **kwargs):
+        """Error level log (standard logging interface)"""
+        self.logger.error(message, *args, exc_info=exc_info, extra=extra or {}, **kwargs)
+    
+    def critical(self, message: str, *args, exc_info: Optional[Any] = None, extra: Optional[Dict] = None, **kwargs):
+        """Critical level log (standard logging interface)"""
+        self.logger.critical(message, *args, exc_info=exc_info, extra=extra or {}, **kwargs)
+    
+    # Contextual logging methods (for convenience)
     def debug_with_context(self, message: str, **context):
         """Debug level log with context"""
         self._log_with_context(logging.DEBUG, message, **context)
